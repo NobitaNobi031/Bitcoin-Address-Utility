@@ -1,98 +1,69 @@
-﻿// Copyright 2012 Mike Caldwell (Casascius)
-// This file is part of Bitcoin Address Utility.
+﻿using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Telegram.Bot;
+using Telegram.Bot.Types;
+using Telegram.Bot.Extensions.Polling;
+using Telegram.Bot.Types.Enums;
+using dotenv.net;
+using BtcAddress; // from the Bitcoin Address Utility
 
-// Bitcoin Address Utility is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
+class Program
+{
+    static ITelegramBotClient botClient;
 
-// Bitcoin Address Utility is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
+    static async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken ct)
+    {
+        if (update.Type == UpdateType.Message && update.Message!.Text != null)
+        {
+            var text = update.Message.Text;
 
-// You should have received a copy of the GNU General Public License
-// along with Bitcoin Address Utility.  If not, see http://www.gnu.org/licenses/.
+            if (text.StartsWith("/start"))
+            {
+                await bot.SendTextMessageAsync(update.Message.Chat.Id,
+                    "Welcome 🚀\nUse /gen to generate a Bitcoin address",
+                    cancellationToken: ct);
+            }
+            else if (text.StartsWith("/gen"))
+            {
+                var key = new KeyPair();
+                string address = key.AddressBase58;
+                string privKey = key.PrivateKeyWif;
 
-
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Windows.Forms;
-
-namespace BtcAddress {
-    static class Program {
-
-        public static Form1 AddressUtility = null;
-
-        public static Base58Calc Base58Calc = null;
-
-        public static MofNcalc MofNcalc = null;
-
-        public static PpecKeygen IntermediateGen = null;
-
-        public static KeyCombiner KeyCombiner = null;
-
-        public static BtcAddress.Forms.DecryptKey DecryptKey = null;
-
-        public static BtcAddress.Forms.Bip38ConfValidator ConfValidator = null;
-
-        public static BtcAddress.Forms.EscrowTools EscrowTools = null;
-
-        public static void ShowAddressUtility() {
-            AddressUtility = showForm<Form1>(AddressUtility);
-        }
-
-        public static void ShowBase58Calc() {
-            Base58Calc = showForm<Base58Calc>(Base58Calc);
-        }
-
-        public static void ShowMofNcalc() {
-            MofNcalc = showForm<MofNcalc>(MofNcalc);
-        }
-
-        public static void ShowIntermediateGen() {
-            IntermediateGen = showForm<PpecKeygen>(IntermediateGen);
-        }
-
-        public static void ShowKeyCombiner() {
-            KeyCombiner = showForm<KeyCombiner>(KeyCombiner);
-        }
-
-        public static void ShowConfValidator() {
-            ConfValidator = showForm<BtcAddress.Forms.Bip38ConfValidator>(ConfValidator);
-        }
-
-        public static void ShowKeyDecrypter() {
-            DecryptKey = showForm<BtcAddress.Forms.DecryptKey>(DecryptKey);
-        }
-
-        public static void ShowEscrowTools() {
-            EscrowTools = showForm<BtcAddress.Forms.EscrowTools>(EscrowTools);
-
-        }
-
-        private static T showForm<T>(T currentform) where T : Form, new() {
-            if (currentform == null || currentform.Visible == false) {
-                T rv = new T();
-                rv.Show();
-                return rv;
-            } else {
-                currentform.Focus();
-                return currentform;
+                await bot.SendTextMessageAsync(update.Message.Chat.Id,
+                    $"💳 Address: {address}\n🔑 Private Key: {privKey}",
+                    cancellationToken: ct);
             }
         }
+    }
 
+    static Task HandleErrorAsync(ITelegramBotClient bot, Exception ex, CancellationToken ct)
+    {
+        Console.WriteLine($"Error: {ex.Message}");
+        return Task.CompletedTask;
+    }
 
-        /// <summary>
-        /// The main entry point for the application.
-        /// </summary>
-        [STAThread]
-        static void Main() {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            
-            Application.Run(new BtcAddress.Forms.KeyCollectionView());
+    static async Task Main()
+    {
+        // Load local .env (optional for dev)
+        DotEnv.Load();
+
+        var token = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
+        if (string.IsNullOrEmpty(token))
+        {
+            Console.WriteLine("❌ Bot token not found!");
+            return;
         }
+
+        botClient = new TelegramBotClient(token);
+
+        using var cts = new CancellationTokenSource();
+
+        botClient.StartReceiving(
+            new DefaultUpdateHandler(HandleUpdateAsync, HandleErrorAsync),
+            cts.Token);
+
+        Console.WriteLine("🤖 Bot running...");
+        await Task.Delay(-1, cts.Token); // keep app alive
     }
 }
